@@ -1,4 +1,11 @@
 import { ulid } from "ulid";
+
+export class DuplicateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateError";
+  }
+}
 import {
   VAULT_DIRS,
   type Bookmark,
@@ -24,9 +31,25 @@ function slugify(text: string): string {
     .slice(0, 80);
 }
 
+/** Check if a URL has already been bookmarked */
+async function isDuplicate(url: string): Promise<string | null> {
+  const files = await listVaultFiles(VAULT_DIRS.raw);
+  for (const f of files) {
+    const parsed = await readVaultFile<RawFrontmatter>(f);
+    if (parsed?.frontmatter.url === url) return f;
+  }
+  return null;
+}
+
 /** Ingest a new bookmark: write .md to raw/, log it */
 export async function ingestBookmark(input: CreateBookmarkInput): Promise<Bookmark> {
   await ensureVault();
+
+  // Check for duplicate URL
+  const existing = await isDuplicate(input.url);
+  if (existing) {
+    throw new DuplicateError(`Already bookmarked: ${existing}`);
+  }
 
   const id = ulid();
   const slug = slugify(input.title);

@@ -40,6 +40,9 @@ export function startServer(): Promise<void> {
         if (err.name === "ZodError") {
           return c.json({ error: "Validation failed", issues: err.issues }, 400);
         }
+        if (err.name === "DuplicateError") {
+          return c.json({ error: err.message }, 409);
+        }
         throw err;
       }
     });

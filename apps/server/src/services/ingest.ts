@@ -16,6 +16,22 @@ import {
   vaultDir,
 } from "./vault.js";
 
+export class DuplicateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateError";
+  }
+}
+
+async function isDuplicate(url: string): Promise<string | null> {
+  const files = await listVaultFiles(VAULT_DIRS.raw);
+  for (const f of files) {
+    const parsed = await readVaultFile<RawFrontmatter>(f);
+    if (parsed?.frontmatter.url === url) return f;
+  }
+  return null;
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -27,6 +43,11 @@ function slugify(text: string): string {
 /** Ingest a new bookmark: write .md to raw/, log it */
 export async function ingestBookmark(input: CreateBookmarkInput): Promise<Bookmark> {
   await ensureVault();
+
+  const existing = await isDuplicate(input.url);
+  if (existing) {
+    throw new DuplicateError(`Already bookmarked: ${existing}`);
+  }
 
   const id = ulid();
   const slug = slugify(input.title);

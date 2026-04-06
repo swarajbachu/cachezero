@@ -1,6 +1,6 @@
 {
   "name": "cachezero",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "AI-powered second brain — bookmark, compile, query",
   "type": "module",
   "bin": {

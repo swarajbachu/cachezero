@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
@@ -12,64 +12,111 @@ function formatElapsed(seconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-/** Run claude CLI with a prompt, showing elapsed time and streaming output */
-function runClaude(prompt: string, label: string): Promise<boolean> {
+/** Run claude CLI with streaming JSON to show live progress */
+function runClaude(prompt: string, label: string): Promise<{ ok: boolean; result: string }> {
   return new Promise((resolve) => {
     const startTime = Date.now();
     const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let spinIdx = 0;
-    let lastLine = "";
+    let statusLine = "";
+    let resultText = "";
+    let lastUpdate = "";
 
-    // Show elapsed timer
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const frame = spinner[spinIdx % spinner.length];
-      spinIdx++;
-      process.stderr.write(`\r${frame} ${label}... ${formatElapsed(elapsed)}  ${lastLine.slice(0, 60).padEnd(60)}`);
+      const frame = spinner[spinIdx++ % spinner.length];
+      const display = statusLine ? `  ${statusLine.slice(0, 55)}` : "";
+      process.stderr.write(`\r${frame} ${label}... ${formatElapsed(elapsed)}${display.padEnd(60)}`);
     }, 200);
 
     const child = spawn("claude", [
       "-p", prompt,
+      "--output-format", "stream-json",
+      "--verbose",
       "--allowedTools", "Edit,Write,Read,Glob,Grep,Bash(cat *),Bash(ls *)",
     ], {
       cwd: VAULT_DIR,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "ignore"],
       timeout: 600000,
     });
 
-    let output = "";
+    let buffer = "";
 
     child.stdout?.on("data", (data: Buffer) => {
-      const text = data.toString();
-      output += text;
-      // Track last meaningful line for status display
-      const lines = text.split("\n").filter((l: string) => l.trim());
-      if (lines.length > 0) {
-        lastLine = lines[lines.length - 1]!.trim();
-      }
-    });
+      buffer += data.toString();
 
-    child.stderr?.on("data", (data: Buffer) => {
-      // Capture but don't display stderr noise
+      // Parse complete JSON lines
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? ""; // Keep incomplete last line
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+
+          // Tool use events — show what Claude is doing
+          if (event.type === "assistant" && event.message?.content) {
+            for (const block of event.message.content) {
+              if (block.type === "tool_use") {
+                const tool = block.name;
+                const input = block.input;
+
+                if (tool === "Read" && input?.file_path) {
+                  const file = input.file_path.replace(VAULT_DIR + "/", "");
+                  const msg = `Reading ${file}`;
+                  if (msg !== lastUpdate) {
+                    statusLine = msg;
+                    lastUpdate = msg;
+                  }
+                } else if (tool === "Write" && input?.file_path) {
+                  const file = input.file_path.replace(VAULT_DIR + "/", "");
+                  const msg = `Writing ${file}`;
+                  if (msg !== lastUpdate) {
+                    // Clear spinner line and print permanent log
+                    process.stderr.write(`\r${"".padEnd(120)}\r`);
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    console.log(`  [${formatElapsed(elapsed)}] Writing ${file}`);
+                    statusLine = msg;
+                    lastUpdate = msg;
+                  }
+                } else if (tool === "Edit" && input?.file_path) {
+                  const file = input.file_path.replace(VAULT_DIR + "/", "");
+                  const msg = `Editing ${file}`;
+                  if (msg !== lastUpdate) {
+                    process.stderr.write(`\r${"".padEnd(120)}\r`);
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    console.log(`  [${formatElapsed(elapsed)}] Editing ${file}`);
+                    statusLine = msg;
+                    lastUpdate = msg;
+                  }
+                } else if (tool === "Glob" || tool === "Grep") {
+                  statusLine = `Searching files...`;
+                }
+              }
+            }
+          }
+
+          // Final result
+          if (event.type === "result") {
+            resultText = event.result ?? "";
+          }
+        } catch {
+          // Ignore parse errors for incomplete JSON
+        }
+      }
     });
 
     child.on("close", (code) => {
       clearInterval(timer);
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      process.stderr.write(`\r${"".padEnd(120)}\r`); // Clear spinner line
+      process.stderr.write(`\r${"".padEnd(120)}\r`);
 
       if (code === 0) {
-        console.log(`Done in ${formatElapsed(elapsed)}.`);
-        if (output.trim()) {
-          console.log("\n" + output.trim());
-        }
-        resolve(true);
+        console.log(`\nDone in ${formatElapsed(elapsed)}.`);
+        resolve({ ok: true, result: resultText });
       } else {
-        console.error(`Failed after ${formatElapsed(elapsed)}.`);
-        if (output.trim()) {
-          console.error(output.trim());
-        }
-        resolve(false);
+        console.error(`\nFailed after ${formatElapsed(elapsed)}.`);
+        resolve({ ok: false, result: resultText });
       }
     });
 
@@ -77,7 +124,7 @@ function runClaude(prompt: string, label: string): Promise<boolean> {
       clearInterval(timer);
       process.stderr.write(`\r${"".padEnd(120)}\r`);
       console.error(`Claude error: ${err.message}`);
-      resolve(false);
+      resolve({ ok: false, result: "" });
     });
   });
 }
@@ -135,13 +182,17 @@ export async function runCompile() {
     "Start by reading the raw files, then create the wiki pages.",
   ].join("\n");
 
-  const ok = await runClaude(prompt, "Compiling wiki");
+  const { ok, result } = await runClaude(prompt, "Compiling wiki");
 
   if (!ok) {
     console.error("\nCompilation failed. You can compile manually:");
     console.error("  cd ~/.cachezero/vault && claude");
     console.error('  Then say: "Read SCHEMA.md and compile the wiki from raw sources"');
     process.exit(1);
+  }
+
+  if (result) {
+    console.log("\n" + result);
   }
 
   // Trigger reindex
@@ -185,9 +236,11 @@ export async function runAsk(question: string, opts: { save?: boolean }) {
   ].join("\n");
 
   console.log("Searching knowledge base...\n");
-  const ok = await runClaude(prompt, "Thinking");
+  const { ok, result } = await runClaude(prompt, "Thinking");
 
-  if (!ok) {
+  if (ok && result) {
+    console.log("\n" + result);
+  } else if (!ok) {
     console.error("\nFailed. Try manually:");
     console.error("  cd ~/.cachezero/vault && claude");
     console.error("  Then ask your question.");
@@ -220,9 +273,11 @@ export async function runHealth() {
   ].join("\n");
 
   console.log("Running wiki health check...\n");
-  const ok = await runClaude(prompt, "Reviewing wiki");
+  const { ok, result } = await runClaude(prompt, "Reviewing wiki");
 
-  if (!ok) {
+  if (ok && result) {
+    console.log("\n" + result);
+  } else if (!ok) {
     console.error("\nFailed. Try manually:");
     console.error("  cd ~/.cachezero/vault && claude");
     console.error('  Then say: "Review the wiki for issues and save a health report"');

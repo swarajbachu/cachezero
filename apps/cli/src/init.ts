@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync, cpSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ const BASE_DIR = join(homedir(), ".cachezero");
 const VAULT_DIR = join(BASE_DIR, "vault");
 const INDEX_DIR = join(BASE_DIR, "index");
 const CONFIG_PATH = join(BASE_DIR, "config.json");
+const EXTENSION_DIR = join(BASE_DIR, "extension");
 
 const DIRS = [
   join(VAULT_DIR, "raw"),
@@ -27,6 +28,30 @@ function ask(question: string): Promise<string> {
   });
 }
 
+function installExtension(): boolean {
+  if (existsSync(join(EXTENSION_DIR, "manifest.json"))) {
+    console.log("  Chrome extension already installed.");
+    return true;
+  }
+
+  // Find bundled extension (shipped with the npm package)
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const bundledExt = [
+    join(__dirname, "..", "extension"),
+    join(__dirname, "extension"),
+  ].find((p) => existsSync(join(p, "manifest.json")));
+
+  if (!bundledExt) {
+    console.warn("  Chrome extension not found in package. Skipping.");
+    return false;
+  }
+
+  mkdirSync(EXTENSION_DIR, { recursive: true });
+  cpSync(bundledExt, EXTENSION_DIR, { recursive: true });
+  console.log("  Chrome extension installed to ~/.cachezero/extension/");
+  return true;
+}
+
 export async function runInit() {
   console.log("\nCacheZero — AI-Powered Second Brain\n");
 
@@ -42,7 +67,6 @@ export async function runInit() {
   const schemaPath = join(VAULT_DIR, "SCHEMA.md");
   if (!existsSync(schemaPath)) {
     const __dirname = dirname(fileURLToPath(import.meta.url));
-    // Check both bundled location (dist/) and dev location (src/)
     const templatePath = [
       join(__dirname, "..", "templates", "schema.md"),
       join(__dirname, "templates", "schema.md"),
@@ -51,8 +75,7 @@ export async function runInit() {
       const template = readFileSync(templatePath, "utf-8");
       writeFileSync(schemaPath, template);
     } else {
-      // Fallback if template not found (e.g. running via tsx directly)
-      writeFileSync(schemaPath, "# CacheZero Knowledge Base Schema\n\nSee https://github.com/cachezero for documentation.\n");
+      writeFileSync(schemaPath, "# CacheZero Knowledge Base Schema\n\nSee https://github.com/swarajbachu/cachezero for documentation.\n");
     }
     console.log("  Created SCHEMA.md");
   }
@@ -78,13 +101,13 @@ export async function runInit() {
     mkdirSync(obsidianDir, { recursive: true });
     writeFileSync(
       join(obsidianDir, "app.json"),
-      JSON.stringify({
-        alwaysUpdateLinks: true,
-        useMarkdownLinks: false,
-      }, null, 2)
+      JSON.stringify({ alwaysUpdateLinks: true, useMarkdownLinks: false }, null, 2)
     );
     console.log("  Created .obsidian/ config");
   }
+
+  // Install Chrome extension
+  installExtension();
 
   // Config file
   if (!existsSync(CONFIG_PATH)) {
@@ -107,8 +130,11 @@ export async function runInit() {
   }
 
   console.log("\nDone! Next steps:");
-  console.log("  1. Start the server:  cachezero start  (or: pnpm --filter @cachezero/server dev)");
+  console.log("  1. Start the server:  npx cachezero start");
   console.log("  2. Open in Obsidian:  ~/.cachezero/vault/");
-  console.log("  3. Install the Chrome extension from apps/extension/.output/chrome-mv3/");
+  console.log("  3. Load Chrome extension:");
+  console.log("     → Open chrome://extensions");
+  console.log("     → Enable Developer Mode");
+  console.log(`     → Click "Load unpacked" → select ~/.cachezero/extension/`);
   console.log("  4. Start bookmarking!\n");
 }

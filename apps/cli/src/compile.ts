@@ -1,38 +1,85 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
 const BASE_DIR = join(homedir(), ".cachezero");
 const VAULT_DIR = join(BASE_DIR, "vault");
 
-/** Run claude CLI with a prompt, piped via a temp file to avoid shell escaping issues */
-function runClaude(prompt: string): boolean {
-  // Write prompt to a temp file, then pass it via --prompt-file or pipe
-  const tmpPrompt = join(BASE_DIR, ".tmp-prompt.txt");
-  writeFileSync(tmpPrompt, prompt, "utf-8");
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
 
-  // Use spawn with the prompt as an argument array (no shell interpolation)
-  // --allowedTools lets Claude write files without interactive approval
-  const result = spawnSync("claude", [
-    "-p", prompt,
-    "--allowedTools", "Edit,Write,Read,Glob,Grep,Bash(cat *),Bash(ls *)",
-  ], {
-    cwd: VAULT_DIR,
-    stdio: "inherit",
-    timeout: 600000, // 10 min
-    maxBuffer: 50 * 1024 * 1024,
+/** Run claude CLI with a prompt, showing elapsed time and streaming output */
+function runClaude(prompt: string, label: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let spinIdx = 0;
+    let lastLine = "";
+
+    // Show elapsed timer
+    const timer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const frame = spinner[spinIdx % spinner.length];
+      spinIdx++;
+      process.stderr.write(`\r${frame} ${label}... ${formatElapsed(elapsed)}  ${lastLine.slice(0, 60).padEnd(60)}`);
+    }, 200);
+
+    const child = spawn("claude", [
+      "-p", prompt,
+      "--allowedTools", "Edit,Write,Read,Glob,Grep,Bash(cat *),Bash(ls *)",
+    ], {
+      cwd: VAULT_DIR,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 600000,
+    });
+
+    let output = "";
+
+    child.stdout?.on("data", (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      // Track last meaningful line for status display
+      const lines = text.split("\n").filter((l: string) => l.trim());
+      if (lines.length > 0) {
+        lastLine = lines[lines.length - 1]!.trim();
+      }
+    });
+
+    child.stderr?.on("data", (data: Buffer) => {
+      // Capture but don't display stderr noise
+    });
+
+    child.on("close", (code) => {
+      clearInterval(timer);
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      process.stderr.write(`\r${"".padEnd(120)}\r`); // Clear spinner line
+
+      if (code === 0) {
+        console.log(`Done in ${formatElapsed(elapsed)}.`);
+        if (output.trim()) {
+          console.log("\n" + output.trim());
+        }
+        resolve(true);
+      } else {
+        console.error(`Failed after ${formatElapsed(elapsed)}.`);
+        if (output.trim()) {
+          console.error(output.trim());
+        }
+        resolve(false);
+      }
+    });
+
+    child.on("error", (err) => {
+      clearInterval(timer);
+      process.stderr.write(`\r${"".padEnd(120)}\r`);
+      console.error(`Claude error: ${err.message}`);
+      resolve(false);
+    });
   });
-
-  // Clean up
-  try { require("node:fs").unlinkSync(tmpPrompt); } catch {}
-
-  if (result.error) {
-    console.error(`Claude error: ${result.error.message}`);
-    return false;
-  }
-
-  return result.status === 0;
 }
 
 export async function runCompile() {
@@ -41,9 +88,8 @@ export async function runCompile() {
     process.exit(1);
   }
 
-  try {
-    spawnSync("which", ["claude"], { stdio: "ignore" });
-  } catch {
+  const claudeCheck = spawnSync("which", ["claude"]);
+  if (claudeCheck.status !== 0) {
     console.error("Claude Code CLI not found. Install it from: https://claude.ai/claude-code");
     process.exit(1);
   }
@@ -60,12 +106,13 @@ export async function runCompile() {
     process.exit(1);
   }
 
-  console.log(`Found ${rawFiles.length} raw source(s). Compiling wiki...\n`);
-
   const existingWikiDir = join(VAULT_DIR, "wiki");
   const existingWiki = existsSync(existingWikiDir)
     ? readdirSync(existingWikiDir).filter((f) => f.endsWith(".md") && f !== "INDEX.md")
     : [];
+
+  console.log(`Found ${rawFiles.length} raw source(s), ${existingWiki.length} existing wiki page(s).`);
+  console.log("Compiling wiki with Claude Code...\n");
 
   const prompt = [
     "You are a knowledge base compiler working in this directory.",
@@ -88,7 +135,7 @@ export async function runCompile() {
     "Start by reading the raw files, then create the wiki pages.",
   ].join("\n");
 
-  const ok = runClaude(prompt);
+  const ok = await runClaude(prompt, "Compiling wiki");
 
   if (!ok) {
     console.error("\nCompilation failed. You can compile manually:");
@@ -97,10 +144,8 @@ export async function runCompile() {
     process.exit(1);
   }
 
-  console.log("\nWiki compilation complete.");
-
   // Trigger reindex
-  console.log("Reindexing...");
+  console.log("\nReindexing...");
   try {
     const res = await fetch("http://localhost:3777/api/reindex", { method: "POST" });
     if (res.ok) {
@@ -115,6 +160,12 @@ export async function runCompile() {
 export async function runAsk(question: string, opts: { save?: boolean }) {
   if (!existsSync(VAULT_DIR)) {
     console.error("Vault not found. Run `cachezero init` first.");
+    process.exit(1);
+  }
+
+  const claudeCheck = spawnSync("which", ["claude"]);
+  if (claudeCheck.status !== 0) {
+    console.error("Claude Code CLI not found.");
     process.exit(1);
   }
 
@@ -133,17 +184,25 @@ export async function runAsk(question: string, opts: { save?: boolean }) {
     `Question: ${question}`,
   ].join("\n");
 
-  const ok = runClaude(prompt);
+  console.log("Searching knowledge base...\n");
+  const ok = await runClaude(prompt, "Thinking");
+
   if (!ok) {
     console.error("\nFailed. Try manually:");
     console.error("  cd ~/.cachezero/vault && claude");
-    console.error(`  Then ask your question.`);
+    console.error("  Then ask your question.");
   }
 }
 
 export async function runHealth() {
   if (!existsSync(VAULT_DIR)) {
     console.error("Vault not found. Run `cachezero init` first.");
+    process.exit(1);
+  }
+
+  const claudeCheck = spawnSync("which", ["claude"]);
+  if (claudeCheck.status !== 0) {
+    console.error("Claude Code CLI not found.");
     process.exit(1);
   }
 
@@ -160,7 +219,9 @@ export async function runHealth() {
     "Be thorough but concise.",
   ].join("\n");
 
-  const ok = runClaude(prompt);
+  console.log("Running wiki health check...\n");
+  const ok = await runClaude(prompt, "Reviewing wiki");
+
   if (!ok) {
     console.error("\nFailed. Try manually:");
     console.error("  cd ~/.cachezero/vault && claude");

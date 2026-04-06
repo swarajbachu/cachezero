@@ -33,6 +33,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Quartz (cloned separately, not part of this repo)
+apps/quartz/
+
+# WXT extension output
+apps/extension/.output/
+apps/extension/.wxt/
+
 # Misc
 .DS_Store
 *.pem

@@ -1,0 +1,24 @@
+{
+  "name": "@cachezero/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "check-types": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@cachezero/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cachezero/typescript-config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "5.9.2"
+  }
+}

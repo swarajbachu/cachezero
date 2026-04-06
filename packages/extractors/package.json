@@ -1,0 +1,27 @@
+{
+  "name": "@cachezero/extractors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "check-types": "tsc --noEmit",
+    "dev": "tsc -b --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@cachezero/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@cachezero/typescript-config": "workspace:*",
+    "typescript": "5.9.2"
+  }
+}

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=360">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="header">
+    <h1>CacheZero</h1>
+  </div>
+
+  <div id="offline" class="offline" style="display:none">
+    <p>Server not detected.</p>
+    <code>npx cachezero start</code>
+  </div>
+
+  <div id="main" class="content" style="display:none">
+    <div class="preview">
+      <div class="preview-type" id="type"></div>
+      <div class="preview-title" id="title"></div>
+      <div class="preview-author" id="author"></div>
+      <div class="preview-text" id="snippet"></div>
+    </div>
+
+    <input
+      type="text"
+      class="tags-input"
+      id="tags"
+      placeholder="Tags (comma separated)"
+      autofocus
+    >
+
+    <button class="btn btn-save" id="saveBtn">Save to Knowledge Base</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

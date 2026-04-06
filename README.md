@@ -249,6 +249,12 @@ pnpm --filter @cachezero/extension build
 pnpm --filter cachezero build
 ```
 
+## Support
+
+If CacheZero is useful to you, consider sponsoring the project. It helps me keep building and shipping.
+
+[Sponsor on GitHub](https://github.com/sponsors/swarajbachu)
+
 ## License
 
 MIT

@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { runInit } from "./init.js";
 import { runPublish } from "./publish.js";
+import { runCompile, runAsk, runHealth as runWikiHealth } from "./compile.js";
 
 const SERVER = "http://localhost:3777";
 const PID_FILE = join(homedir(), ".cachezero", "server.pid");
@@ -180,6 +181,24 @@ program
     const data = await serverFetch("/api/health");
     console.log(JSON.stringify(data, null, 2));
   });
+
+program
+  .command("compile")
+  .description("Compile raw bookmarks into wiki articles using Claude Code")
+  .action(runCompile);
+
+program
+  .command("ask <question>")
+  .description("Ask a question against your knowledge base using Claude Code")
+  .option("--no-save", "Don't save the answer to outputs/")
+  .action(async (question: string, opts: { save?: boolean }) => {
+    await runAsk(question, { save: opts.save !== false });
+  });
+
+program
+  .command("wiki-health")
+  .description("Run a health check on the wiki using Claude Code")
+  .action(runWikiHealth);
 
 program
   .command("publish")

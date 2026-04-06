@@ -30,9 +30,24 @@ function extractPageContent() {
   const images: string[] = [];
 
   if (contentType === "tweet") {
-    const tweetText = document.querySelector('[data-testid="tweetText"]');
+    // Try multiple selectors — X.com changes these periodically
+    const tweetText = document.querySelector('[data-testid="tweetText"]')
+      ?? document.querySelector('[data-testid="twitterArticleRichTextView"]')
+      ?? document.querySelector('article [lang]')
+      ?? document.querySelector('article div[dir="auto"]');
     textContent = tweetText?.textContent?.trim() || "";
-    title = textContent.length > 80 ? textContent.slice(0, 77) + "..." : textContent || "Tweet";
+
+    // Fallback: grab all visible text from the tweet or article
+    if (!textContent) {
+      const container = document.querySelector('[data-testid="tweet"]')
+        ?? document.querySelector('article');
+      textContent = container?.textContent?.replace(/\s+/g, " ").trim().slice(0, 5000) || "";
+    }
+    // Try to get article title from X's article view
+    const articleTitle = document.querySelector('[data-testid="twitter-article-title"]');
+    title = articleTitle?.textContent?.trim()
+      || (textContent.length > 80 ? textContent.slice(0, 77) + "..." : textContent)
+      || "Tweet";
 
     const userNameEl = document.querySelector('[data-testid="User-Name"]');
     if (userNameEl) {

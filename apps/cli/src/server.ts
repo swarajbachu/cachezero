@@ -26,9 +26,22 @@ export function startServer(): Promise<void> {
 
     app.post("/api/bookmarks", async (c) => {
       const body = await c.req.json();
-      const input = CreateBookmarkSchema.parse(body);
-      const bookmark = await ingestBookmark(input);
-      return c.json(bookmark, 201);
+
+      // If textContent is empty, use title or URL as fallback
+      if (!body.textContent || body.textContent.trim() === "") {
+        body.textContent = body.title || body.url || "No content extracted";
+      }
+
+      try {
+        const input = CreateBookmarkSchema.parse(body);
+        const bookmark = await ingestBookmark(input);
+        return c.json(bookmark, 201);
+      } catch (err: any) {
+        if (err.name === "ZodError") {
+          return c.json({ error: "Validation failed", issues: err.issues }, 400);
+        }
+        throw err;
+      }
     });
 
     app.get("/api/bookmarks", async (c) => {

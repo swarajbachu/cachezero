@@ -20,9 +20,6 @@ importers:
 
   apps/cli:
     dependencies:
-      '@cachezero/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@google/generative-ai':
         specifier: ^0.24.0
         version: 0.24.1
@@ -51,6 +48,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@cachezero/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@cachezero/typescript-config':
         specifier: workspace:*
         version: link:../../packages/typescript-config

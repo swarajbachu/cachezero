@@ -9,8 +9,10 @@ export const twitterExtractor: Extractor = {
   },
 
   extract(doc: Document, url: string): ExtractedContent {
-    // Tweet text
-    const tweetTextEl = doc.querySelector('[data-testid="tweetText"]');
+    // Tweet text — try multiple selectors as X.com changes these
+    const tweetTextEl = doc.querySelector('[data-testid="tweetText"]')
+      ?? doc.querySelector('[data-testid="twitterArticleRichTextView"]')
+      ?? doc.querySelector('article [lang]');
     const textContent = tweetTextEl?.textContent?.trim() ?? "";
 
     // Author
@@ -36,10 +38,11 @@ export const twitterExtractor: Extractor = {
       if (src) images.push(src);
     }
 
-    // Title: use first ~80 chars of text
-    const title = textContent.length > 80
-      ? textContent.slice(0, 77) + "..."
-      : textContent || "Tweet";
+    // Title: prefer article title, fall back to first ~80 chars of text
+    const articleTitleEl = doc.querySelector('[data-testid="twitter-article-title"]');
+    const title = articleTitleEl?.textContent?.trim()
+      || (textContent.length > 80 ? textContent.slice(0, 77) + "..." : textContent)
+      || "Tweet";
 
     // Try to get date from time element
     const timeEl = doc.querySelector("time");

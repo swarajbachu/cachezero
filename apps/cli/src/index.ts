@@ -27,7 +27,7 @@ const program = new Command();
 program
   .name("cachezero")
   .description("AI-powered second brain — bookmark, index, search")
-  .version("0.1.0");
+  .version(process.env["npm_package_version"] ?? "0.1.8");
 
 program
   .command("init")

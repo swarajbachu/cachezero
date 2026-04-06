@@ -129,12 +129,40 @@ export async function runInit() {
     console.log(`  Config already exists at ${CONFIG_PATH.replace(homedir(), "~")}`);
   }
 
-  console.log("\nDone! Next steps:");
-  console.log("  1. Start the server:  npx cachezero start");
-  console.log("  2. Open in Obsidian:  ~/.cachezero/vault/");
-  console.log("  3. Load Chrome extension:");
-  console.log("     → Open chrome://extensions");
-  console.log("     → Enable Developer Mode");
+  // Ask to start the server
+  const startNow = await ask("\nStart the server now? (Y/n): ");
+  if (startNow.toLowerCase() !== "n") {
+    console.log("  Starting server...");
+    // Import and run start logic inline
+    const { openSync } = await import("node:fs");
+    const { spawn: spawnChild } = await import("node:child_process");
+    const logFile = join(BASE_DIR, "server.log");
+    const out = openSync(logFile, "a");
+    const binPath = process.argv[1]!;
+    const child = spawnChild(process.execPath, [binPath, "start", "--foreground"], {
+      detached: true,
+      stdio: ["ignore", out, out],
+    });
+    child.unref();
+    if (child.pid) {
+      writeFileSync(join(BASE_DIR, "server.pid"), String(child.pid));
+      // Wait for server
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const res = await fetch("http://localhost:3777/api/status");
+        if (res.ok) {
+          console.log(`  Server running on http://localhost:3777 (PID: ${child.pid})`);
+        }
+      } catch {
+        console.log(`  Server starting (PID: ${child.pid})...`);
+      }
+    }
+  }
+
+  console.log("\nAll set! Next steps:");
+  console.log("  1. Open in Obsidian:  ~/.cachezero/vault/");
+  console.log("  2. Load Chrome extension:");
+  console.log("     → Open chrome://extensions → Enable Developer Mode");
   console.log(`     → Click "Load unpacked" → select ~/.cachezero/extension/`);
-  console.log("  4. Start bookmarking!\n");
+  console.log("  3. Start bookmarking!\n");
 }

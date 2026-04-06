@@ -24,33 +24,42 @@ The vault is just a folder of markdown files. Open it in **Obsidian** for graph 
 ## Quick start
 
 ```bash
-# 1. Install
-npm i -g cachezero
+# 1. Install and set up everything (one command)
+npx cachezero init
 
-# 2. Set up vault, config, and Chrome extension
-cachezero init
+#    This will:
+#    → Create ~/.cachezero/vault/ (your Obsidian-compatible knowledge base)
+#    → Install the Chrome extension to ~/.cachezero/extension/
+#    → Prompt for a free Gemini API key (for vector search)
+#    → Start the server in the background
 
-# 3. Start the server (runs in background)
-cachezero start
-
-# 4. Load the Chrome extension
+# 2. Load the Chrome extension
 #    → Open chrome://extensions
 #    → Enable Developer Mode
 #    → Click "Load unpacked" → select ~/.cachezero/extension/
 
-# 5. Start bookmarking!
+# 3. Start bookmarking!
 #    Browse the web → click the CacheZero icon → Save
+
+# 4. Compile your wiki (requires Claude Code CLI)
+npx cachezero compile
 ```
 
 ## Commands
 
-### Bookmarking & browsing
+### Server
 
 ```bash
+cachezero init               # Set up vault, config, extension, start server
 cachezero start              # Start server in background
 cachezero stop               # Stop server
 cachezero status             # Show server, vault, and index stats
+cachezero health             # Check server + embedding service health
+```
 
+### Bookmarking & browsing
+
+```bash
 cachezero list               # List all bookmarks
 cachezero list -t tweet      # Filter by type (tweet, article, linkedin, youtube)
 cachezero list --tag ai      # Filter by tag
@@ -74,16 +83,16 @@ Requires [Claude Code](https://claude.ai/claude-code) installed.
 cachezero compile            # Read raw/ → compile wiki/ articles
 ```
 
-This calls your local `claude` CLI. Claude reads all raw sources, follows the conventions in `SCHEMA.md`, and creates interconnected wiki pages with `[[wikilinks]]`, YAML frontmatter, and source citations. Example output:
+This calls your local `claude` CLI with a spinner and elapsed timer. Claude reads all raw sources, follows the conventions in `SCHEMA.md`, and creates interconnected wiki pages with `[[wikilinks]]`, YAML frontmatter, and source citations. Example output:
 
 ```
-Found 3 raw source(s). Compiling wiki...
+Found 6 raw source(s), 7 existing wiki page(s).
+Compiling wiki with Claude Code...
 
-Done. Compiled 3 raw sources into 7 wiki pages:
-  schlep-blindness, paul-graham, stripe, y-combinator,
-  viral-ugc-framework, lightreel-ai, cursor
+⠹ Compiling wiki... 2m 14s  Writing wiki/transformer-architecture.md
 
-All pages have YAML frontmatter, [[wikilinks]], and source citations.
+Done in 3m 2s.
+Compiled 6 raw sources into 12 wiki pages.
 INDEX.md and log.md updated.
 ```
 

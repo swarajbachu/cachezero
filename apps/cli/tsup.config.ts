@@ -1,25 +1,25 @@
 import { defineConfig } from "tsup";
 
+const shared = {
+  format: ["esm"] as const,
+  target: "node18" as const,
+  outDir: "dist",
+  splitting: false,
+  sourcemap: true,
+  external: ["@lancedb/lancedb", "apache-arrow"],
+  noExternal: ["@cachezero/shared"],
+};
+
 export default defineConfig([
   {
+    ...shared,
     entry: ["src/index.ts"],
-    format: ["esm"],
-    target: "node18",
-    outDir: "dist",
     clean: true,
-    splitting: false,
-    sourcemap: true,
-    external: ["@lancedb/lancedb", "apache-arrow"],
     banner: { js: "#!/usr/bin/env node" },
   },
   {
+    ...shared,
     entry: ["src/start-daemon.ts"],
-    format: ["esm"],
-    target: "node18",
-    outDir: "dist",
     clean: false,
-    splitting: false,
-    sourcemap: true,
-    external: ["@lancedb/lancedb", "apache-arrow"],
   },
 ]);

@@ -1,6 +1,6 @@
 import { Command } from "commander";
-import { execSync, fork } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, openSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -54,24 +54,28 @@ program
       const { startServer } = await import("./server.js");
       await startServer();
     } else {
-      // Fork a child process that runs the server
-      const serverScript = join(__dirname, "start-daemon.js");
-      const child = fork(serverScript, [], {
+      // Spawn detached process using the same cachezero binary with --foreground
+      const binPath = process.argv[1]!;
+      const logFile = join(homedir(), ".cachezero", "server.log");
+      const out = openSync(logFile, "a");
+      const child = spawn(process.execPath, [binPath, "start", "--foreground"], {
         detached: true,
-        stdio: "ignore",
+        stdio: ["ignore", out, out],
       });
       child.unref();
       if (child.pid) {
         writeFileSync(PID_FILE, String(child.pid));
-        // Wait briefly for server to start
-        await new Promise((r) => setTimeout(r, 1500));
+        // Wait for server to start
+        await new Promise((r) => setTimeout(r, 2000));
         try {
           const res = await fetch(`${SERVER}/api/status`);
           if (res.ok) {
-            console.log(`Server started (PID: ${child.pid})`);
+            console.log(`Server started in background (PID: ${child.pid})`);
+            console.log(`Logs: ~/.cachezero/server.log`);
           }
         } catch {
           console.log(`Server starting (PID: ${child.pid})...`);
+          console.log(`Check logs: ~/.cachezero/server.log`);
         }
       }
     }

@@ -1,6 +1,6 @@
 {
   "name": "cachezero",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AI-powered second brain — bookmark, compile, query",
   "type": "module",
   "bin": {
@@ -30,6 +30,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@cachezero/shared": "workspace:*",
     "@cachezero/typescript-config": "workspace:*",
     "@types/node": "^22.0.0",
     "tsup": "^8.4.0",

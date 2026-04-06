@@ -29,12 +29,7 @@ function ask(question: string): Promise<string> {
 }
 
 function installExtension(): boolean {
-  if (existsSync(join(EXTENSION_DIR, "manifest.json"))) {
-    console.log("  Chrome extension already installed.");
-    return true;
-  }
-
-  // Find bundled extension (shipped with the npm package)
+  // Always update extension files (user may have upgraded cachezero)
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const bundledExt = [
     join(__dirname, "..", "extension"),
@@ -42,13 +37,20 @@ function installExtension(): boolean {
   ].find((p) => existsSync(join(p, "manifest.json")));
 
   if (!bundledExt) {
+    if (existsSync(join(EXTENSION_DIR, "manifest.json"))) {
+      console.log("  Chrome extension already installed.");
+      return true;
+    }
     console.warn("  Chrome extension not found in package. Skipping.");
     return false;
   }
 
   mkdirSync(EXTENSION_DIR, { recursive: true });
   cpSync(bundledExt, EXTENSION_DIR, { recursive: true });
-  console.log("  Chrome extension installed to ~/.cachezero/extension/");
+  const wasUpdate = existsSync(join(EXTENSION_DIR, "manifest.json"));
+  console.log(wasUpdate
+    ? "  Chrome extension updated."
+    : "  Chrome extension installed to ~/.cachezero/extension/");
   return true;
 }
 

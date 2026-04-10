@@ -63,6 +63,119 @@ const config: QuartzConfig = {
 export default config
 `.trim();
 
+const QUARTZ_LAYOUT = `
+import { PageLayout, SharedLayout } from "./quartz/cfg"
+import * as Component from "./quartz/components"
+
+export const sharedPageComponents: SharedLayout = {
+  head: Component.Head(),
+  header: [],
+  afterBody: [],
+  footer: Component.Footer({
+    links: {
+      GitHub: "https://github.com/swarajbachu/cachezero",
+      Twitter: "https://x.com/swarajb",
+    },
+  }),
+}
+
+export const defaultContentPageLayout: PageLayout = {
+  beforeBody: [
+    Component.ConditionalRender({
+      component: Component.Breadcrumbs(),
+      condition: (page) => page.fileData.slug !== "index",
+    }),
+    Component.ArticleTitle(),
+    Component.ContentMeta(),
+    Component.TagList(),
+  ],
+  left: [
+    Component.PageTitle(),
+    Component.MobileOnly(Component.Spacer()),
+    Component.Flex({
+      components: [
+        { Component: Component.Search(), grow: true },
+        { Component: Component.Darkmode() },
+        { Component: Component.ReaderMode() },
+      ],
+    }),
+    Component.Explorer(),
+  ],
+  right: [
+    Component.Graph(),
+    Component.DesktopOnly(Component.TableOfContents()),
+    Component.Backlinks(),
+  ],
+}
+
+export const defaultListPageLayout: PageLayout = {
+  beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
+  left: [
+    Component.PageTitle(),
+    Component.MobileOnly(Component.Spacer()),
+    Component.Flex({
+      components: [
+        { Component: Component.Search(), grow: true },
+        { Component: Component.Darkmode() },
+      ],
+    }),
+    Component.Explorer(),
+  ],
+  right: [],
+}
+`.trim();
+
+const QUARTZ_FOOTER = `
+import { QuartzComponent, QuartzComponentConstructor, QuartzComponentProps } from "./types"
+import style from "./styles/footer.scss"
+
+interface Options {
+  links: Record<string, string>
+}
+
+export default ((opts?: Options) => {
+  const Footer: QuartzComponent = ({ displayClass }: QuartzComponentProps) => {
+    const year = new Date().getFullYear()
+    const links = opts?.links ?? []
+    return (
+      <footer class={\`\${displayClass ?? ""}\`}>
+        <p>
+          Built with <a href="https://github.com/swarajbachu/cachezero">CacheZero</a> &{" "}
+          <a href="https://quartz.jzhao.xyz/">Quartz</a> © {year}
+        </p>
+        <ul>
+          {Object.entries(links).map(([text, link]) => (
+            <li>
+              <a href={link}>{text}</a>
+            </li>
+          ))}
+        </ul>
+      </footer>
+    )
+  }
+
+  Footer.css = style
+  return Footer
+}) satisfies QuartzComponentConstructor
+`.trim();
+
+const DEFAULT_INDEX_MD = `---
+title: Home
+---
+
+# My Second Brain
+
+Welcome to my CacheZero knowledge base.
+
+## Browse
+- [[wiki/INDEX|Wiki Index]] — All compiled knowledge
+- [[raw/|Raw Sources]] — Bookmarked content
+- [[outputs/|Outputs]] — Generated analyses and reports
+
+## Stats
+This knowledge base is maintained by an LLM agent. Raw sources are bookmarked via the Chrome extension, then compiled into interconnected wiki articles.
+`.trim();
+
 function ensureQuartz(): string {
   if (existsSync(join(QUARTZ_DIR, "quartz.config.ts"))) {
     return QUARTZ_DIR;
@@ -75,8 +188,10 @@ function ensureQuartz(): string {
     stdio: "inherit",
   });
 
-  // Write our config
+  // Write our config, layout, and footer
   writeFileSync(join(QUARTZ_DIR, "quartz.config.ts"), QUARTZ_CONFIG);
+  writeFileSync(join(QUARTZ_DIR, "quartz.layout.ts"), QUARTZ_LAYOUT);
+  writeFileSync(join(QUARTZ_DIR, "quartz", "components", "Footer.tsx"), QUARTZ_FOOTER);
 
   // Write vercel.json
   writeFileSync(
@@ -116,6 +231,13 @@ export async function runPublish(opts: { quartzDir?: string; deploy?: boolean })
     recursive: true,
     filter: (src) => !src.includes(".obsidian") && !src.includes(".DS_Store"),
   });
+  // Ensure index.md exists so the homepage renders
+  const indexPath = join(contentDir, "index.md");
+  if (!existsSync(indexPath)) {
+    writeFileSync(indexPath, DEFAULT_INDEX_MD);
+    console.log("  Created default index.md for homepage.");
+  }
+
   console.log("  Done.\n");
 
   // Step 3: Build Quartz
